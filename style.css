@@ -17,10 +17,12 @@
     outline: none;
 }
 
+
 body {
     font-family: "Montserrat", sans-serif;
     display: flex;
     flex-direction: column;
+background-image: url(./img/bg\ body.png);
 }
 
 .main {
@@ -156,6 +158,7 @@ body {
     background: #0a0a0a80;
     position: relative;
     padding: 0 0 146px;
+    background-image: url(./pic.png);
 }
 
 .header::after {
