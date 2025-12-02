@@ -1,79 +1,180 @@
+const API_KEY = 'GxDzkfGCFz900fvLiCUzjO4VEZhSzI0Z'; 
+const BASE_URL = 'https://app.ticketmaster.com/discovery/v2/events.json';
+
+const grid = document.querySelector('.grid');
+const spinner = document.querySelector('.spinner');
+const searchInput = document.querySelector('.header_input') || document.querySelector('#search');
+const FALLBACK = 'https://via.placeholder.com/400x300?text=No+Image';
 
 
 const modal = document.getElementById('modal');
 const closeModalBtn = document.getElementById('closeModal');
-const grid = document.querySelector('.grid');
+const modalTitle = document.getElementById('modal-title');
+const modalImg = document.getElementById('modal-img');
+const modalInfo = document.getElementById('modal-info');
+const modalWhen = document.getElementById('modal-when');
+const modalWhere = document.getElementById('modal-where');
 
-let currentPage = 1;
-const LIMIT = 20;
+function escapeHtml(s = '') {
+  return String(s)
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'",'&#039;');
+}
 
+function pickImage(images = []) {
+  if (!images || !images.length) return null;
 
-function openModal(titleText) {
-
-  const modalLeft = document.querySelector('.modal-left');
-  const modalRight = document.querySelector('.modal-right');
-  const modalHeader = document.getElementById('modal-header');
-  const modalPoster = document.getElementById('modal-poster');
-
-  if (modalLeft) modalLeft.style.display = 'none';
-  if (modalRight) modalRight.style.display = 'none';
-
-
-  if (modalHeader) modalHeader.textContent = titleText;
-  if (modalPoster) modalPoster.textContent = titleText;
-
-
-  let onlyTitle = document.getElementById('modal-only-title');
-  if (!onlyTitle) {
-    onlyTitle = document.createElement('div');
-    onlyTitle.id = 'modal-only-title';
-    onlyTitle.style.textAlign = 'center';
-    onlyTitle.style.fontSize = '28px';
-    onlyTitle.style.fontWeight = '700';
-    onlyTitle.style.color = '#DC56C5';
-    onlyTitle.style.padding = '40px 20px';
-    const modalContent = document.querySelector('.modal-content');
-    if (modalContent) modalContent.insertBefore(onlyTitle, modalContent.firstChild.nextSibling);
+  for (const img of images) {
+    if (img.width && img.width > 400) return img.url;
   }
-  onlyTitle.textContent = titleText;
+  return images[0].url || null;
+}
 
+async function fetchEvents({ keyword = '', country = '', page = 0, size = 12 } = {}) {
+
+  if (spinner) spinner.classList.add('spinner-show');
+
+  const params = new URLSearchParams({
+    apikey: API_KEY,
+    size: String(size),
+    page: String(page)
+  });
+  if (keyword) params.set('keyword', keyword);
+  if (country) params.set('countryCode', country);
+
+  const url = `${BASE_URL}?${params.toString()}`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const events = data._embedded?.events || [];
+    const pageInfo = data.page || null;
+    return { events, pageInfo };
+  } catch (err) {
+    console.error('fetchEvents error', err);
+    showError(`Ошибка загрузки: ${err.message}`);
+    return { events: [], pageInfo: null };
+  } finally {
+    if (spinner) spinner.classList.remove('spinner-show');
+  }
+}
+
+async function fetchInfoEvent(eventId) {
+  if (spinner) spinner.classList.add('spinner-show');
+  const url = `https://app.ticketmaster.com/discovery/v2/events/${encodeURIComponent(eventId)}.json?apikey=${API_KEY}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error('fetchInfoEvent error', err);
+    showError('Не удалось загрузить детали события');
+    return null;
+  } finally {
+    if (spinner) setTimeout(() => spinner.classList.remove('spinner-show'), 600);
+  }
+}
+
+function showError(msg) {
+
+  if (!grid) return;
+  grid.innerHTML = `<div style="color:#f66;padding:20px">${escapeHtml(msg)}</div>`;
+}
+
+function mapApiEvent(apiEv) {
+  return {
+    id: apiEv.id,
+    title: apiEv.name || 'Untitled',
+    date: apiEv.dates?.start?.localDate || '',
+    time: apiEv.dates?.start?.localTime || '',
+    venue: apiEv._embedded?.venues?.[0]?.name || '',
+    city: apiEv._embedded?.venues?.[0]?.city?.name || '',
+    country: apiEv._embedded?.venues?.[0]?.country?.name || '',
+    img: pickImage(apiEv.images) || null,
+    info: apiEv.info || apiEv.pleaseNote || ''
+  };
+}
+
+function renderCards(events) {
+  if (!grid) return;
+  grid.innerHTML = '';
+  if (!events.length) {
+    grid.innerHTML = `<p style="color:#ccc;padding:20px">Событий не найдено.</p>`;
+    return;
+  }
+
+  events.forEach(ev => {
+    const e = mapApiEvent(ev);
+    const card = document.createElement('div');
+    card.className = 'grid-card';
+    card.dataset.id = e.id;
+    card.innerHTML = `
+      <div class="card-img-wrap">
+        ${e.img ? `<img class="grid-img" src="${escapeHtml(e.img)}" alt="${escapeHtml(e.title)}">` : `<div class="grid-img placeholder"></div>`}
+      </div>
+      <div class="grid-event-name">${escapeHtml(e.title)}</div>
+      <div class="grid-event-date">${escapeHtml(e.date)} ${escapeHtml(e.time)}</div>
+      <div class="grid-event-venue"><p class="grid-event-venue-p">${escapeHtml(e.venue)}</p></div>
+    `;
+    card.addEventListener('click', () => onCardClick(e.id));
+    grid.appendChild(card);
+  });
+}
+
+async function onCardClick(eventId) {
+  const data = await fetchInfoEvent(eventId);
+  if (!data) return;
+  const ev = mapApiEvent(data);
+  openModal(ev);
+}
+
+function openModal(ev) {
+  if (!modal) {
+    alert(`${ev.title}\n${ev.date} ${ev.time}\n${ev.venue}`);
+    return;
+  }
+  if (modalTitle) modalTitle.textContent = ev.title;
+  if (modalImg) modalImg.src = ev.img || FALLBACK;
+  if (modalInfo) modalInfo.textContent = ev.info || '';
+  if (modalWhen) modalWhen.textContent = `${ev.date} ${ev.time}`;
+  if (modalWhere) modalWhere.textContent = `${ev.venue} — ${ev.city || ''} ${ev.country || ''}`;
   modal.style.display = 'block';
 }
 
 function closeModal() {
-
-  const modalLeft = document.querySelector('.modal-left');
-  const modalRight = document.querySelector('.modal-right');
-  if (modalLeft) modalLeft.style.display = '';
-  if (modalRight) modalRight.style.display = '';
-
+  if (!modal) return;
   modal.style.display = 'none';
 }
 
-closeModalBtn.addEventListener('click', closeModal);
+if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
 window.addEventListener('click', e => { if (e.target === modal) closeModal(); });
 
 
-async function loadPage(page = 1) {
-  grid.innerHTML = '';
-  const count = 20;
-  for (let i = 0; i < count; i++) {
-    const card = document.createElement('div');
-    card.className = 'grid-card';
-    card.innerHTML = `
-     <img class="grid-img" src="img/Rectangle.png" alt="LP poster">
-      <div class="grid-event-name">Eurovision 2021 finals!</div>
-      <div class="grid-event-date">2021-05-13</div>
-      <div class="grid-event-venue">
-        <p class="grid-event-venue-p">Palace of Ukraine</p>
-      </div>
-    `;
-    card.addEventListener('click', () => openModal('Eurovision 2021 finals!'));
-    grid.appendChild(card);
+async function init() {
+
+  const { events } = await fetchEvents({ size: 20, page: 0 });
+  renderCards(events);
+
+
+  if (searchInput) {
+    let t;
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(t);
+      t = setTimeout(async () => {
+        const q = e.target.value.trim();
+        const { events } = await fetchEvents({ keyword: q, size: 12, page: 0 });
+        renderCards(events);
+      }, 500);
+    });
   }
 }
 
-
-loadPage(currentPage);
-
-
+init();
