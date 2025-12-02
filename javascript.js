@@ -55,15 +55,15 @@ window.addEventListener('click', e => { if (e.target === modal) closeModal(); })
 
 
 async function loadPage(page = 1) {
- 
   grid.innerHTML = '';
-  const count = 12; 
+  const count = 20;
   for (let i = 0; i < count; i++) {
     const card = document.createElement('div');
     card.className = 'grid-card';
     card.innerHTML = `
-      <div class="grid-text-title">Eurovision 2021 finals!</div>
-      <div class="grid-text-date">2021-05-13</div>
+     <img class="grid-img" src="img/Rectangle.png" alt="LP poster">
+      <div class="grid-event-name">Eurovision 2021 finals!</div>
+      <div class="grid-event-date">2021-05-13</div>
       <div class="grid-event-venue">
         <p class="grid-event-venue-p">Palace of Ukraine</p>
       </div>
@@ -75,3 +75,5 @@ async function loadPage(page = 1) {
 
 
 loadPage(currentPage);
+
+
